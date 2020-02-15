@@ -1,0 +1,5 @@
+.pio
+.idea
+.travis.yml
+CMakeLists*
+cmake-build*
