@@ -7,13 +7,14 @@
 #define BUTTON_PIN 0 // D3 == GPIO0
 
 #define USE_BUTTON 1
+//#define SIMPLE_MODE 1
 
 CRGB leds[NUM_LEDS];
 
-const unsigned short int debounceDelay = 200;
-volatile boolean buttonPressed = false;
+const uint8_t debounceDelay = 200;
+volatile bool buttonPressed = false;
 volatile unsigned long lastDebounceTime = 0;
-unsigned short int mode = 0;
+uint8_t mode = 0;
 
 #ifdef USE_BUTTON
 ICACHE_RAM_ATTR void processButton() {
@@ -33,62 +34,111 @@ void setup() {
     FastLED.addLeds<WS2812B, DATA_PIN, GRB>(leds, NUM_LEDS);
 }
 
-void setLEDOff(CRGB *led) {
-    led->setColorCode(0);
+void turnOffLEDs() {
+    for (CRGB &led : leds) {
+        led.setColorCode(0);
+    }
     FastLED.show();
 }
 
-void setLEDOn(CRGB *led) {
-    led->setColorCode(0xFFFFFF);
-    FastLED.show();
-}
-
-void setLEDBlink(CRGB *led) {
-    setLEDOn(led);
-    delay(100);
-    setLEDOff(led);
-    delay(50);
-}
-
-void setLEDRGBW(CRGB *led) {
+void fireRGBW(int d) {
     unsigned int color = 0xFF0000; // 0xRRGGBB
-    for (int i=0; i<3; i++) {
-        led->setColorCode(color);
+    for (uint8_t c=0; c<3; c++) {
+        for (CRGB &led : leds) {
+            led.setColorCode(color);
+        }
+#ifdef USE_BUTTON
+        if (buttonPressed) return;
+#endif
         FastLED.show();
-        delay(300);
+        delay(d);
         color >>= 8u; // 0xFF0000 -> 0x00FF00 -> 0x0000FF
     }
-    led->setColorCode(~color); // 0xFFFFFF
+    for (CRGB &led : leds) {
+        led.setColorCode(~color); // 0xFFFFFF
+    }
+#ifdef USE_BUTTON
+    if (buttonPressed) return;
+#endif
     FastLED.show();
-    delay(300);
-    led->setColorCode(color); // 0x000000
+    delay(d);
+    for (CRGB &led : leds) {
+        led.setColorCode(color); // 0x000000
+    }
     FastLED.show();
+    delay(100);
 }
 
-void setLEDBrightness(CRGB *led) {
-    const unsigned short int step = 10;
-    for (int i=0; i<256; i+=step) {
-        led->setRGB(i, i, i);
+void setLEDsBrightness(int d) {
+    const uint8_t step = 5;
+    for (uint8_t c=0; c<255; c+=step) {
+        for (CRGB &led : leds) {
+            led.setRGB(c, c, c);
+        }
+#ifdef USE_BUTTON
+        if (buttonPressed) return;
+#endif
         FastLED.show();
         delay(10);
     }
-    led->setColorCode(0xFFFFFF);
-    FastLED.show();
-    delay(10);
-    for (int i=255; i>0; i-=step) {
-        led->setRGB(i, i, i);
+    delay(d);
+    for (uint8_t c=255; c>0; c-=step) {
+        for (CRGB &led : leds) {
+            led.setRGB(c, c, c);
+        }
+#ifdef USE_BUTTON
+        if (buttonPressed) return;
+#endif
         FastLED.show();
         delay(10);
     }
-    led->setColorCode(0);
-    FastLED.show();
-    delay(10);
+    turnOffLEDs();
+    delay(d);
+}
+
+void fireOneByOne() {
+    for (CRGB &led : leds) {
+#ifdef USE_BUTTON
+        if (buttonPressed) return;
+#endif
+        led.setColorCode(0xFFFFFF);
+        FastLED.show();
+        delay(100);
+        led.setColorCode(0);
+        FastLED.show();
+        delay(50);
+    }
+}
+
+void turnOnOneByOne(int d) {
+    for (CRGB &led : leds) {
+#ifdef USE_BUTTON
+        if (buttonPressed) return;
+#endif
+        led.setColorCode(0xFFFFFF);
+        FastLED.show();
+        delay(100);
+    }
+    delay(d);
+    for (CRGB &led : leds) {
+#ifdef USE_BUTTON
+        if (buttonPressed) return;
+#endif
+        led.setColorCode(0);
+        FastLED.show();
+        delay(100);
+    }
 }
 
 void loop() {
+#ifdef SIMPLE_MODE
+    uint8_t steps = 2;
+#else
+    uint8_t steps = 4;
+#endif
 #ifdef USE_BUTTON
     if (buttonPressed) {
-        if (mode < 4) {
+            if (mode < steps) {
             ++mode;
         } else {
             mode = 0;
@@ -96,68 +146,36 @@ void loop() {
         buttonPressed = false;
     }
 #else
-    if (mode < 4) {
+    if (mode < steps) {
         mode++;
     } else {
         mode = 0;
     }
 #endif
+
     switch (mode) {
         case 0: {
-            for (CRGB &led : leds) {
-#ifdef USE_BUTTON
-                if (buttonPressed) break;
-#endif
-                setLEDOff(&led);
-#ifndef USE_BUTTON
-                delay(500);
-#endif
-            }
+            turnOffLEDs();
             break;
         }
         case 1: {
-            FastLED.setBrightness(100);
-            for (CRGB &led : leds) {
-#ifdef USE_BUTTON
-                if (buttonPressed) break;
-#endif
-                setLEDBlink(&led);
-            }
+            fireRGBW(1000);
             break;
         }
         case 2: {
-            FastLED.setBrightness(100);
-            for (CRGB &led : leds) {
-#ifdef USE_BUTTON
-                if (buttonPressed) break;
-#endif
-                setLEDBrightness(&led);
-            }
+            setLEDsBrightness(1000);
             break;
         }
+#ifndef SIMPLE_MODE
         case 3: {
-            FastLED.setBrightness(1);
-            for (CRGB &led : leds) {
-#ifdef USE_BUTTON
-                if (buttonPressed) break;
-#endif
-                setLEDRGBW(&led);
-            }
+            fireOneByOne();
             break;
         }
         case 4: {
-            FastLED.setBrightness(100);
-            for (CRGB &led : leds) {
-#ifdef USE_BUTTON
-                if (buttonPressed) break;
-#endif
-                setLEDOn(&led);
-            }
-#ifndef USE_BUTTON
-            delay(1000);
-#endif
+            turnOnOneByOne(500);
             break;
         }
+#endif
         default: break;
     }
 }
